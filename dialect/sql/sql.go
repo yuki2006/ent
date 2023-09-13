@@ -317,14 +317,28 @@ func orderByAgg(fn, field string, opts ...OrderTermOption) *OrderExprTerm {
 func (f *OrderFieldTerm) ToFunc() func(*Selector) {
 	return func(s *Selector) {
 		s.OrderExprFunc(func(b *Builder) {
-			b.WriteString(s.C(f.Field))
-			if f.Desc {
-				b.WriteString(" DESC")
-			}
-			if f.NullsFirst {
-				b.WriteString(" NULLS FIRST")
-			} else if f.NullsLast {
-				b.WriteString(" NULLS LAST")
+			if b.Dialect() == dialect.MySQL {
+				if f.NullsFirst {
+					b.WriteString(f.Field).WriteString(" IS NOT NULL").Comma()
+				}
+				if f.NullsLast {
+					b.WriteString(f.Field).WriteString(" IS NULL").Comma()
+				}
+				b.WriteString(s.C(f.Field))
+				if f.Desc {
+					b.WriteString(" DESC")
+				}
+
+			} else {
+				b.WriteString(s.C(f.Field))
+				if f.Desc {
+					b.WriteString(" DESC")
+				}
+				if f.NullsFirst {
+					b.WriteString(" NULLS FIRST")
+				} else if f.NullsLast {
+					b.WriteString(" NULLS LAST")
+				}
 			}
 		})
 	}

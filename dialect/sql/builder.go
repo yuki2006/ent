@@ -16,6 +16,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -3991,6 +3992,64 @@ func isModifier(s string) bool {
 		if strings.HasPrefix(s, m) {
 			return true
 		}
+	}
+	return false
+}
+
+// EQ NULL for MySQL wapper
+func EQNull(col string, value any) *Predicate {
+	p := P()
+	return p.Append(func(b *Builder) {
+		switch {
+		case isNil(value) && b.dialect == dialect.MySQL:
+			b.Ident(col).WriteString(" IS NULL")
+		default:
+			b.Ident(col)
+			b.WriteOp(OpEQ)
+			p.arg(b, value)
+		}
+	})
+}
+
+// LT NULL for MySQL wrapper
+func LTNull(col string, value any) *Predicate {
+	p := P()
+	return p.Append(func(b *Builder) {
+		switch {
+		case isNil(value) && b.dialect == dialect.MySQL:
+			b.WriteString("FALSE")
+		default:
+			b.Ident(col)
+			p.WriteOp(OpLT)
+			p.arg(b, value)
+		}
+	})
+}
+
+// GT NULL for MySQL wrapper
+func GTNull(col string, value any) *Predicate {
+	p := P()
+	return p.Append(func(b *Builder) {
+		switch {
+		case isNil(value) && b.dialect == dialect.MySQL:
+			b.Ident(col).WriteString(" IS NOT NULL")
+		default:
+			b.Ident(col)
+			p.WriteOp(OpGT)
+			p.arg(b, value)
+		}
+	})
+}
+
+func isNil(i interface{}) bool {
+	if i == nil {
+		return true
+	}
+
+	v := reflect.ValueOf(i)
+	switch v.Kind() {
+	case reflect.Ptr, reflect.Map, reflect.Array, reflect.Chan, reflect.Slice:
+		return v.IsNil()
 	}
 	return false
 }
