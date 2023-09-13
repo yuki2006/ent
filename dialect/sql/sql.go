@@ -113,13 +113,6 @@ func FieldsLTE(field1, field2 string) func(*Selector) {
 	}
 }
 
-// FieldsHasPrefix returns a raw predicate to checks if field1 begins with the value of field2.
-func FieldsHasPrefix(field1, field2 string) func(*Selector) {
-	return func(s *Selector) {
-		s.Where(ColumnsHasPrefix(s.C(field1), s.C(field2)))
-	}
-}
-
 // FieldIn returns a raw predicate to check if the value of the field is IN the given values.
 func FieldIn[T any](name string, vs ...T) func(*Selector) {
 	return func(s *Selector) {
@@ -174,63 +167,6 @@ func FieldContains(name string, substr string) func(*Selector) {
 func FieldContainsFold(name string, substr string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(ContainsFold(s.C(name), substr))
-	}
-}
-
-// AndPredicates returns a new predicate for joining multiple generated predicates with AND between them.
-func AndPredicates[P ~func(*Selector)](predicates ...P) func(*Selector) {
-	return func(s *Selector) {
-		s.CollectPredicates()
-		for _, p := range predicates {
-			p(s)
-		}
-		collected := s.CollectedPredicates()
-		s.UncollectedPredicates()
-		switch len(collected) {
-		case 0:
-		case 1:
-			s.Where(collected[0])
-		default:
-			s.Where(And(collected...))
-		}
-	}
-}
-
-// OrPredicates returns a new predicate for joining multiple generated predicates with OR between them.
-func OrPredicates[P ~func(*Selector)](predicates ...P) func(*Selector) {
-	return func(s *Selector) {
-		s.CollectPredicates()
-		for _, p := range predicates {
-			p(s)
-		}
-		collected := s.CollectedPredicates()
-		s.UncollectedPredicates()
-		switch len(collected) {
-		case 0:
-		case 1:
-			s.Where(collected[0])
-		default:
-			s.Where(Or(collected...))
-		}
-	}
-}
-
-// NotPredicates wraps the generated predicates with NOT. For example, NOT(P), NOT((P1 AND P2)).
-func NotPredicates[P ~func(*Selector)](predicates ...P) func(*Selector) {
-	return func(s *Selector) {
-		s.CollectPredicates()
-		for _, p := range predicates {
-			p(s)
-		}
-		collected := s.CollectedPredicates()
-		s.UncollectedPredicates()
-		switch len(collected) {
-		case 0:
-		case 1:
-			s.Where(Not(collected[0]))
-		default:
-			s.Where(Not(And(collected...)))
-		}
 	}
 }
 
@@ -378,33 +314,33 @@ func orderByAgg(fn, field string, opts ...OrderTermOption) *OrderExprTerm {
 	}
 }
 
-// OrderByRand returns a term to natively order by a random value.
-func OrderByRand() func(*Selector) {
-	return func(s *Selector) {
-		s.OrderExprFunc(func(b *Builder) {
-			switch s.Dialect() {
-			case dialect.MySQL:
-				b.WriteString("RAND()")
-			default:
-				b.WriteString("RANDOM()")
-			}
-		})
-	}
-}
-
 // ToFunc returns a function that sets the ordering on the given selector.
 // This is used by the generated code.
 func (f *OrderFieldTerm) ToFunc() func(*Selector) {
 	return func(s *Selector) {
 		s.OrderExprFunc(func(b *Builder) {
-			b.WriteString(s.C(f.Field))
-			if f.Desc {
-				b.WriteString(" DESC")
-			}
-			if f.NullsFirst {
-				b.WriteString(" NULLS FIRST")
-			} else if f.NullsLast {
-				b.WriteString(" NULLS LAST")
+			if b.Dialect() == dialect.MySQL {
+				if f.NullsFirst {
+					b.WriteString(f.Field).WriteString(" IS NOT NULL").Comma()
+				}
+				if f.NullsLast {
+					b.WriteString(f.Field).WriteString(" IS NULL").Comma()
+				}
+				b.WriteString(s.C(f.Field))
+				if f.Desc {
+					b.WriteString(" DESC")
+				}
+
+			} else {
+				b.WriteString(s.C(f.Field))
+				if f.Desc {
+					b.WriteString(" DESC")
+				}
+				if f.NullsFirst {
+					b.WriteString(" NULLS FIRST")
+				} else if f.NullsLast {
+					b.WriteString(" NULLS LAST")
+				}
 			}
 		})
 	}

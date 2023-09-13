@@ -16,6 +16,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -890,13 +891,13 @@ func (i *InsertBuilder) OnConflict(opts ...ConflictOption) *InsertBuilder {
 
 // UpdateSet describes a set of changes of the `DO UPDATE` clause.
 type UpdateSet struct {
-	*UpdateBuilder
 	columns []string
+	update  *UpdateBuilder
 }
 
 // Table returns the table the `UPSERT` statement is executed on.
 func (u *UpdateSet) Table() *SelectTable {
-	return Dialect(u.UpdateBuilder.dialect).Table(u.UpdateBuilder.table)
+	return Dialect(u.update.dialect).Table(u.update.table)
 }
 
 // Columns returns all columns in the `INSERT` statement.
@@ -906,24 +907,24 @@ func (u *UpdateSet) Columns() []string {
 
 // UpdateColumns returns all columns in the `UPDATE` statement.
 func (u *UpdateSet) UpdateColumns() []string {
-	return append(u.UpdateBuilder.nulls, u.UpdateBuilder.columns...)
+	return append(u.update.nulls, u.update.columns...)
 }
 
 // Set sets a column to a given value.
 func (u *UpdateSet) Set(column string, v any) *UpdateSet {
-	u.UpdateBuilder.Set(column, v)
+	u.update.Set(column, v)
 	return u
 }
 
 // Add adds a numeric value to the given column.
 func (u *UpdateSet) Add(column string, v any) *UpdateSet {
-	u.UpdateBuilder.Add(column, v)
+	u.update.Add(column, v)
 	return u
 }
 
 // SetNull sets a column as null value.
 func (u *UpdateSet) SetNull(column string) *UpdateSet {
-	u.UpdateBuilder.SetNull(column)
+	u.update.SetNull(column)
 	return u
 }
 
@@ -935,14 +936,14 @@ func (u *UpdateSet) SetIgnore(name string) *UpdateSet {
 // SetExcluded sets the column name to its EXCLUDED/VALUES value.
 // For example, "c" = "excluded"."c", or `c` = VALUES(`c`).
 func (u *UpdateSet) SetExcluded(name string) *UpdateSet {
-	switch u.UpdateBuilder.Dialect() {
+	switch u.update.Dialect() {
 	case dialect.MySQL:
-		u.UpdateBuilder.Set(name, ExprFunc(func(b *Builder) {
+		u.update.Set(name, ExprFunc(func(b *Builder) {
 			b.WriteString("VALUES(").Ident(name).WriteByte(')')
 		}))
 	default:
-		t := Dialect(u.UpdateBuilder.dialect).Table("excluded")
-		u.UpdateBuilder.Set(name, Expr(t.C(name)))
+		t := Dialect(u.update.dialect).Table("excluded")
+		u.update.Set(name, Expr(t.C(name)))
 	}
 	return u
 }
@@ -1019,12 +1020,12 @@ func (i *InsertBuilder) writeConflict(b *Builder) {
 	if len(i.conflict.action.update) == 0 {
 		b.AddError(errors.New("missing action for 'DO UPDATE SET' clause"))
 	}
-	u := &UpdateSet{UpdateBuilder: Dialect(i.dialect).Update(i.table), columns: i.columns}
-	u.Builder = *b
+	u := &UpdateSet{columns: i.columns, update: Dialect(i.dialect).Update(i.table)}
+	u.update.Builder = *b
 	for _, f := range i.conflict.action.update {
 		f(u)
 	}
-	u.writeSetter(b)
+	u.update.writeSetter(b)
 	if p := i.conflict.action.where; p != nil {
 		p.qualifier = i.table
 		b.WriteString(" WHERE ").Join(p)
@@ -1726,32 +1727,6 @@ func (p *Predicate) HasPrefix(col, prefix string) *Predicate {
 	return p.escapedLike(col, "", "%", prefix)
 }
 
-// ColumnsHasPrefix appends a new predicate that checks if the given column begins with the other column (prefix).
-func ColumnsHasPrefix(col, prefixC string) *Predicate {
-	return P().ColumnsHasPrefix(col, prefixC)
-}
-
-// ColumnsHasPrefix appends a new predicate that checks if the given column begins with the other column (prefix).
-func (p *Predicate) ColumnsHasPrefix(col, prefixC string) *Predicate {
-	return p.Append(func(b *Builder) {
-		switch p.dialect {
-		case dialect.MySQL:
-			b.Ident(col)
-			b.WriteOp(OpLike)
-			b.S("CONCAT(REPLACE(REPLACE(").Ident(prefixC).S(", '_', '\\_'), '%', '\\%'), '%')")
-		case dialect.Postgres, dialect.SQLite:
-			b.Ident(col)
-			b.WriteOp(OpLike)
-			b.S("(REPLACE(REPLACE(").Ident(prefixC).S(", '_', '\\_'), '%', '\\%') || '%')")
-			if p.dialect == dialect.SQLite {
-				p.WriteString(" ESCAPE ").Arg("\\")
-			}
-		default:
-			b.AddError(fmt.Errorf("ColumnsHasPrefix: unsupported dialect: %q", p.dialect))
-		}
-	})
-}
-
 // HasSuffix is a helper predicate that checks suffix using the LIKE predicate.
 func HasSuffix(col, suffix string) *Predicate { return P().HasSuffix(col, suffix) }
 
@@ -2172,7 +2147,6 @@ type Selector struct {
 	selection []selection
 	from      []TableView
 	joins     []join
-	collected [][]*Predicate
 	where     *Predicate
 	or        bool
 	not       bool
@@ -2412,35 +2386,8 @@ func (s *Selector) Offset(offset int) *Selector {
 	return s
 }
 
-// CollectPredicates indicates the appended predicated should be collected
-// and not appended to the `WHERE` clause.
-func (s *Selector) CollectPredicates() *Selector {
-	s.collected = append(s.collected, []*Predicate{})
-	return s
-}
-
-// CollectedPredicates returns the collected predicates.
-func (s *Selector) CollectedPredicates() []*Predicate {
-	if len(s.collected) == 0 {
-		return nil
-	}
-	return s.collected[len(s.collected)-1]
-}
-
-// UncollectedPredicates stop collecting predicates.
-func (s *Selector) UncollectedPredicates() *Selector {
-	if len(s.collected) > 0 {
-		s.collected = s.collected[:len(s.collected)-1]
-	}
-	return s
-}
-
 // Where sets or appends the given predicate to the statement.
 func (s *Selector) Where(p *Predicate) *Selector {
-	if len(s.collected) > 0 {
-		s.collected[len(s.collected)-1] = append(s.collected[len(s.collected)-1], p)
-		return s
-	}
 	if s.not {
 		p = Not(p)
 		s.not = false
@@ -4045,6 +3992,64 @@ func isModifier(s string) bool {
 		if strings.HasPrefix(s, m) {
 			return true
 		}
+	}
+	return false
+}
+
+// EQ NULL for MySQL wapper
+func EQNull(col string, value any) *Predicate {
+	p := P()
+	return p.Append(func(b *Builder) {
+		switch {
+		case isNil(value) && b.dialect == dialect.MySQL:
+			b.Ident(col).WriteString(" IS NULL")
+		default:
+			b.Ident(col)
+			b.WriteOp(OpEQ)
+			p.arg(b, value)
+		}
+	})
+}
+
+// LT NULL for MySQL wrapper
+func LTNull(col string, value any) *Predicate {
+	p := P()
+	return p.Append(func(b *Builder) {
+		switch {
+		case isNil(value) && b.dialect == dialect.MySQL:
+			b.WriteString("FALSE")
+		default:
+			b.Ident(col)
+			p.WriteOp(OpLT)
+			p.arg(b, value)
+		}
+	})
+}
+
+// GT NULL for MySQL wrapper
+func GTNull(col string, value any) *Predicate {
+	p := P()
+	return p.Append(func(b *Builder) {
+		switch {
+		case isNil(value) && b.dialect == dialect.MySQL:
+			b.Ident(col).WriteString(" IS NOT NULL")
+		default:
+			b.Ident(col)
+			p.WriteOp(OpGT)
+			p.arg(b, value)
+		}
+	})
+}
+
+func isNil(i interface{}) bool {
+	if i == nil {
+		return true
+	}
+
+	v := reflect.ValueOf(i)
+	switch v.Kind() {
+	case reflect.Ptr, reflect.Map, reflect.Array, reflect.Chan, reflect.Slice:
+		return v.IsNil()
 	}
 	return false
 }
