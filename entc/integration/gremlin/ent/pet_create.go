@@ -198,13 +198,13 @@ func (pc *PetCreate) gremlinSave(ctx context.Context) (*Pet, error) {
 	if err, ok := isConstantError(res); ok {
 		return nil, err
 	}
-	pe := &Pet{config: pc.config}
-	if err := pe.FromResponse(res); err != nil {
+	rnode := &Pet{config: pc.config}
+	if err := rnode.FromResponse(res); err != nil {
 		return nil, err
 	}
-	pc.mutation.id = &pe.ID
+	pc.mutation.id = &rnode.ID
 	pc.mutation.done = true
-	return pe, nil
+	return rnode, nil
 }
 
 func (pc *PetCreate) gremlin() *dsl.Traversal {
@@ -252,5 +252,6 @@ func (pc *PetCreate) gremlin() *dsl.Traversal {
 // PetCreateBulk is the builder for creating many Pet entities in bulk.
 type PetCreateBulk struct {
 	config
+	err      error
 	builders []*PetCreate
 }

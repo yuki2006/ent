@@ -102,6 +102,11 @@ func SSOCert(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldSSOCert, v))
 }
 
+// FilesCount applies equality check predicate on the "files_count" field. It's identical to FilesCountEQ.
+func FilesCount(v int) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldFilesCount, v))
+}
+
 // OptionalIntEQ applies the EQ predicate on the "optional_int" field.
 func OptionalIntEQ(v int) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldOptionalInt, v))
@@ -737,6 +742,56 @@ func SSOCertContainsFold(v string) predicate.User {
 	return predicate.User(sql.FieldContainsFold(FieldSSOCert, v))
 }
 
+// FilesCountEQ applies the EQ predicate on the "files_count" field.
+func FilesCountEQ(v int) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldFilesCount, v))
+}
+
+// FilesCountNEQ applies the NEQ predicate on the "files_count" field.
+func FilesCountNEQ(v int) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldFilesCount, v))
+}
+
+// FilesCountIn applies the In predicate on the "files_count" field.
+func FilesCountIn(vs ...int) predicate.User {
+	return predicate.User(sql.FieldIn(FieldFilesCount, vs...))
+}
+
+// FilesCountNotIn applies the NotIn predicate on the "files_count" field.
+func FilesCountNotIn(vs ...int) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldFilesCount, vs...))
+}
+
+// FilesCountGT applies the GT predicate on the "files_count" field.
+func FilesCountGT(v int) predicate.User {
+	return predicate.User(sql.FieldGT(FieldFilesCount, v))
+}
+
+// FilesCountGTE applies the GTE predicate on the "files_count" field.
+func FilesCountGTE(v int) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldFilesCount, v))
+}
+
+// FilesCountLT applies the LT predicate on the "files_count" field.
+func FilesCountLT(v int) predicate.User {
+	return predicate.User(sql.FieldLT(FieldFilesCount, v))
+}
+
+// FilesCountLTE applies the LTE predicate on the "files_count" field.
+func FilesCountLTE(v int) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldFilesCount, v))
+}
+
+// FilesCountIsNil applies the IsNil predicate on the "files_count" field.
+func FilesCountIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldFilesCount))
+}
+
+// FilesCountNotNil applies the NotNil predicate on the "files_count" field.
+func FilesCountNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldFilesCount))
+}
+
 // HasCard applies the HasEdge predicate on the "card" edge.
 func HasCard() predicate.User {
 	return predicate.User(func(s *sql.Selector) {
@@ -992,32 +1047,15 @@ func HasParentWith(preds ...predicate.User) predicate.User {
 
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.User) predicate.User {
-	return predicate.User(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for _, p := range predicates {
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.User(sql.AndPredicates(predicates...))
 }
 
 // Or groups predicates with the OR operator between them.
 func Or(predicates ...predicate.User) predicate.User {
-	return predicate.User(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for i, p := range predicates {
-			if i > 0 {
-				s1.Or()
-			}
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.User(sql.OrPredicates(predicates...))
 }
 
 // Not applies the not operator on the given predicate.
 func Not(p predicate.User) predicate.User {
-	return predicate.User(func(s *sql.Selector) {
-		p(s.Not())
-	})
+	return predicate.User(sql.NotPredicates(p))
 }

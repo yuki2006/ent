@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"reflect"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
@@ -19,6 +20,7 @@ import (
 	"entgo.io/ent/dialect/gremlin/graph/dsl"
 	"entgo.io/ent/dialect/gremlin/graph/dsl/g"
 	"entgo.io/ent/entc/integration/gremlin/ent/api"
+	"entgo.io/ent/entc/integration/gremlin/ent/builder"
 	"entgo.io/ent/entc/integration/gremlin/ent/card"
 	"entgo.io/ent/entc/integration/gremlin/ent/comment"
 	"entgo.io/ent/entc/integration/gremlin/ent/exvaluescan"
@@ -31,6 +33,7 @@ import (
 	"entgo.io/ent/entc/integration/gremlin/ent/item"
 	"entgo.io/ent/entc/integration/gremlin/ent/license"
 	"entgo.io/ent/entc/integration/gremlin/ent/node"
+	"entgo.io/ent/entc/integration/gremlin/ent/pc"
 	"entgo.io/ent/entc/integration/gremlin/ent/pet"
 	"entgo.io/ent/entc/integration/gremlin/ent/spec"
 	enttask "entgo.io/ent/entc/integration/gremlin/ent/task"
@@ -42,6 +45,8 @@ type Client struct {
 	config
 	// Api is the client for interacting with the Api builders.
 	Api *APIClient
+	// Builder is the client for interacting with the Builder builders.
+	Builder *BuilderClient
 	// Card is the client for interacting with the Card builders.
 	Card *CardClient
 	// Comment is the client for interacting with the Comment builders.
@@ -66,6 +71,8 @@ type Client struct {
 	License *LicenseClient
 	// Node is the client for interacting with the Node builders.
 	Node *NodeClient
+	// PC is the client for interacting with the PC builders.
+	PC *PCClient
 	// Pet is the client for interacting with the Pet builders.
 	Pet *PetClient
 	// Spec is the client for interacting with the Spec builders.
@@ -88,6 +95,7 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Api = NewAPIClient(c.config)
+	c.Builder = NewBuilderClient(c.config)
 	c.Card = NewCardClient(c.config)
 	c.Comment = NewCommentClient(c.config)
 	c.ExValueScan = NewExValueScanClient(c.config)
@@ -100,6 +108,7 @@ func (c *Client) init() {
 	c.Item = NewItemClient(c.config)
 	c.License = NewLicenseClient(c.config)
 	c.Node = NewNodeClient(c.config)
+	c.PC = NewPCClient(c.config)
 	c.Pet = NewPetClient(c.config)
 	c.Spec = NewSpecClient(c.config)
 	c.Task = NewTaskClient(c.config)
@@ -180,11 +189,14 @@ func Open(driverName, dataSourceName string, options ...Option) (*Client, error)
 	}
 }
 
+// ErrTxStarted is returned when trying to start a new transaction from a transactional client.
+var ErrTxStarted = errors.New("ent: cannot start a transaction within a transaction")
+
 // Tx returns a new transactional client. The provided context
 // is used until the transaction is committed or rolled back.
 func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	if _, ok := c.driver.(*txDriver); ok {
-		return nil, errors.New("ent: cannot start a transaction within a transaction")
+		return nil, ErrTxStarted
 	}
 	tx, err := newTx(ctx, c.driver)
 	if err != nil {
@@ -196,6 +208,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ctx:         ctx,
 		config:      cfg,
 		Api:         NewAPIClient(cfg),
+		Builder:     NewBuilderClient(cfg),
 		Card:        NewCardClient(cfg),
 		Comment:     NewCommentClient(cfg),
 		ExValueScan: NewExValueScanClient(cfg),
@@ -208,6 +221,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Item:        NewItemClient(cfg),
 		License:     NewLicenseClient(cfg),
 		Node:        NewNodeClient(cfg),
+		PC:          NewPCClient(cfg),
 		Pet:         NewPetClient(cfg),
 		Spec:        NewSpecClient(cfg),
 		Task:        NewTaskClient(cfg),
@@ -241,9 +255,9 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.Api, c.Card, c.Comment, c.ExValueScan, c.FieldType, c.File, c.FileType,
-		c.Goods, c.Group, c.GroupInfo, c.Item, c.License, c.Node, c.Pet, c.Spec,
-		c.Task, c.User,
+		c.Api, c.Builder, c.Card, c.Comment, c.ExValueScan, c.FieldType, c.File,
+		c.FileType, c.Goods, c.Group, c.GroupInfo, c.Item, c.License, c.Node, c.PC,
+		c.Pet, c.Spec, c.Task, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -253,9 +267,9 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.Api, c.Card, c.Comment, c.ExValueScan, c.FieldType, c.File, c.FileType,
-		c.Goods, c.Group, c.GroupInfo, c.Item, c.License, c.Node, c.Pet, c.Spec,
-		c.Task, c.User,
+		c.Api, c.Builder, c.Card, c.Comment, c.ExValueScan, c.FieldType, c.File,
+		c.FileType, c.Goods, c.Group, c.GroupInfo, c.Item, c.License, c.Node, c.PC,
+		c.Pet, c.Spec, c.Task, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -276,6 +290,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
 	case *APIMutation:
 		return c.Api.mutate(ctx, m)
+	case *BuilderMutation:
+		return c.Builder.mutate(ctx, m)
 	case *CardMutation:
 		return c.Card.mutate(ctx, m)
 	case *CommentMutation:
@@ -300,6 +316,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.License.mutate(ctx, m)
 	case *NodeMutation:
 		return c.Node.mutate(ctx, m)
+	case *PCMutation:
+		return c.PC.mutate(ctx, m)
 	case *PetMutation:
 		return c.Pet.mutate(ctx, m)
 	case *SpecMutation:
@@ -343,6 +361,21 @@ func (c *APIClient) Create() *APICreate {
 
 // CreateBulk returns a builder for creating a bulk of Api entities.
 func (c *APIClient) CreateBulk(builders ...*APICreate) *APICreateBulk {
+	return &APICreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *APIClient) MapCreateBulk(slice any, setFunc func(*APICreate, int)) *APICreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &APICreateBulk{err: fmt.Errorf("calling to APIClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*APICreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
 	return &APICreateBulk{config: c.config, builders: builders}
 }
 
@@ -431,6 +464,139 @@ func (c *APIClient) mutate(ctx context.Context, m *APIMutation) (Value, error) {
 	}
 }
 
+// BuilderClient is a client for the Builder schema.
+type BuilderClient struct {
+	config
+}
+
+// NewBuilderClient returns a client for the Builder from the given config.
+func NewBuilderClient(c config) *BuilderClient {
+	return &BuilderClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `builder.Hooks(f(g(h())))`.
+func (c *BuilderClient) Use(hooks ...Hook) {
+	c.hooks.Builder = append(c.hooks.Builder, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `builder.Intercept(f(g(h())))`.
+func (c *BuilderClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Builder = append(c.inters.Builder, interceptors...)
+}
+
+// Create returns a builder for creating a Builder entity.
+func (c *BuilderClient) Create() *BuilderCreate {
+	mutation := newBuilderMutation(c.config, OpCreate)
+	return &BuilderCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Builder entities.
+func (c *BuilderClient) CreateBulk(builders ...*BuilderCreate) *BuilderCreateBulk {
+	return &BuilderCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *BuilderClient) MapCreateBulk(slice any, setFunc func(*BuilderCreate, int)) *BuilderCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &BuilderCreateBulk{err: fmt.Errorf("calling to BuilderClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*BuilderCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &BuilderCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Builder.
+func (c *BuilderClient) Update() *BuilderUpdate {
+	mutation := newBuilderMutation(c.config, OpUpdate)
+	return &BuilderUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *BuilderClient) UpdateOne(b *Builder) *BuilderUpdateOne {
+	mutation := newBuilderMutation(c.config, OpUpdateOne, withBuilder(b))
+	return &BuilderUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *BuilderClient) UpdateOneID(id string) *BuilderUpdateOne {
+	mutation := newBuilderMutation(c.config, OpUpdateOne, withBuilderID(id))
+	return &BuilderUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Builder.
+func (c *BuilderClient) Delete() *BuilderDelete {
+	mutation := newBuilderMutation(c.config, OpDelete)
+	return &BuilderDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *BuilderClient) DeleteOne(b *Builder) *BuilderDeleteOne {
+	return c.DeleteOneID(b.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *BuilderClient) DeleteOneID(id string) *BuilderDeleteOne {
+	builderC := c.Delete().Where(builder.ID(id))
+	builderC.mutation.id = &id
+	builderC.mutation.op = OpDeleteOne
+	return &BuilderDeleteOne{builderC}
+}
+
+// Query returns a query builder for Builder.
+func (c *BuilderClient) Query() *BuilderQuery {
+	return &BuilderQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeBuilder},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Builder entity by its id.
+func (c *BuilderClient) Get(ctx context.Context, id string) (*Builder, error) {
+	return c.Query().Where(builder.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *BuilderClient) GetX(ctx context.Context, id string) *Builder {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *BuilderClient) Hooks() []Hook {
+	return c.hooks.Builder
+}
+
+// Interceptors returns the client interceptors.
+func (c *BuilderClient) Interceptors() []Interceptor {
+	return c.inters.Builder
+}
+
+func (c *BuilderClient) mutate(ctx context.Context, m *BuilderMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&BuilderCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&BuilderUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&BuilderUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&BuilderDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Builder mutation op: %q", m.Op())
+	}
+}
+
 // CardClient is a client for the Card schema.
 type CardClient struct {
 	config
@@ -461,6 +627,21 @@ func (c *CardClient) Create() *CardCreate {
 
 // CreateBulk returns a builder for creating a bulk of Card entities.
 func (c *CardClient) CreateBulk(builders ...*CardCreate) *CardCreateBulk {
+	return &CardCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *CardClient) MapCreateBulk(slice any, setFunc func(*CardCreate, int)) *CardCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &CardCreateBulk{err: fmt.Errorf("calling to CardClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*CardCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
 	return &CardCreateBulk{config: c.config, builders: builders}
 }
 
@@ -604,6 +785,21 @@ func (c *CommentClient) CreateBulk(builders ...*CommentCreate) *CommentCreateBul
 	return &CommentCreateBulk{config: c.config, builders: builders}
 }
 
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *CommentClient) MapCreateBulk(slice any, setFunc func(*CommentCreate, int)) *CommentCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &CommentCreateBulk{err: fmt.Errorf("calling to CommentClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*CommentCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &CommentCreateBulk{config: c.config, builders: builders}
+}
+
 // Update returns an update builder for Comment.
 func (c *CommentClient) Update() *CommentUpdate {
 	mutation := newCommentMutation(c.config, OpUpdate)
@@ -719,6 +915,21 @@ func (c *ExValueScanClient) Create() *ExValueScanCreate {
 
 // CreateBulk returns a builder for creating a bulk of ExValueScan entities.
 func (c *ExValueScanClient) CreateBulk(builders ...*ExValueScanCreate) *ExValueScanCreateBulk {
+	return &ExValueScanCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ExValueScanClient) MapCreateBulk(slice any, setFunc func(*ExValueScanCreate, int)) *ExValueScanCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ExValueScanCreateBulk{err: fmt.Errorf("calling to ExValueScanClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ExValueScanCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
 	return &ExValueScanCreateBulk{config: c.config, builders: builders}
 }
 
@@ -840,6 +1051,21 @@ func (c *FieldTypeClient) CreateBulk(builders ...*FieldTypeCreate) *FieldTypeCre
 	return &FieldTypeCreateBulk{config: c.config, builders: builders}
 }
 
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *FieldTypeClient) MapCreateBulk(slice any, setFunc func(*FieldTypeCreate, int)) *FieldTypeCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &FieldTypeCreateBulk{err: fmt.Errorf("calling to FieldTypeClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*FieldTypeCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &FieldTypeCreateBulk{config: c.config, builders: builders}
+}
+
 // Update returns an update builder for FieldType.
 func (c *FieldTypeClient) Update() *FieldTypeUpdate {
 	mutation := newFieldTypeMutation(c.config, OpUpdate)
@@ -955,6 +1181,21 @@ func (c *FileClient) Create() *FileCreate {
 
 // CreateBulk returns a builder for creating a bulk of File entities.
 func (c *FileClient) CreateBulk(builders ...*FileCreate) *FileCreateBulk {
+	return &FileCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *FileClient) MapCreateBulk(slice any, setFunc func(*FileCreate, int)) *FileCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &FileCreateBulk{err: fmt.Errorf("calling to FileClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*FileCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
 	return &FileCreateBulk{config: c.config, builders: builders}
 }
 
@@ -1109,6 +1350,21 @@ func (c *FileTypeClient) CreateBulk(builders ...*FileTypeCreate) *FileTypeCreate
 	return &FileTypeCreateBulk{config: c.config, builders: builders}
 }
 
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *FileTypeClient) MapCreateBulk(slice any, setFunc func(*FileTypeCreate, int)) *FileTypeCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &FileTypeCreateBulk{err: fmt.Errorf("calling to FileTypeClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*FileTypeCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &FileTypeCreateBulk{config: c.config, builders: builders}
+}
+
 // Update returns an update builder for FileType.
 func (c *FileTypeClient) Update() *FileTypeUpdate {
 	mutation := newFileTypeMutation(c.config, OpUpdate)
@@ -1238,6 +1494,21 @@ func (c *GoodsClient) CreateBulk(builders ...*GoodsCreate) *GoodsCreateBulk {
 	return &GoodsCreateBulk{config: c.config, builders: builders}
 }
 
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GoodsClient) MapCreateBulk(slice any, setFunc func(*GoodsCreate, int)) *GoodsCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GoodsCreateBulk{err: fmt.Errorf("calling to GoodsClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GoodsCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GoodsCreateBulk{config: c.config, builders: builders}
+}
+
 // Update returns an update builder for Goods.
 func (c *GoodsClient) Update() *GoodsUpdate {
 	mutation := newGoodsMutation(c.config, OpUpdate)
@@ -1353,6 +1624,21 @@ func (c *GroupClient) Create() *GroupCreate {
 
 // CreateBulk returns a builder for creating a bulk of Group entities.
 func (c *GroupClient) CreateBulk(builders ...*GroupCreate) *GroupCreateBulk {
+	return &GroupCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GroupClient) MapCreateBulk(slice any, setFunc func(*GroupCreate, int)) *GroupCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GroupCreateBulk{err: fmt.Errorf("calling to GroupClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GroupCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
 	return &GroupCreateBulk{config: c.config, builders: builders}
 }
 
@@ -1518,6 +1804,21 @@ func (c *GroupInfoClient) CreateBulk(builders ...*GroupInfoCreate) *GroupInfoCre
 	return &GroupInfoCreateBulk{config: c.config, builders: builders}
 }
 
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GroupInfoClient) MapCreateBulk(slice any, setFunc func(*GroupInfoCreate, int)) *GroupInfoCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GroupInfoCreateBulk{err: fmt.Errorf("calling to GroupInfoClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GroupInfoCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GroupInfoCreateBulk{config: c.config, builders: builders}
+}
+
 // Update returns an update builder for GroupInfo.
 func (c *GroupInfoClient) Update() *GroupInfoUpdate {
 	mutation := newGroupInfoMutation(c.config, OpUpdate)
@@ -1647,6 +1948,21 @@ func (c *ItemClient) CreateBulk(builders ...*ItemCreate) *ItemCreateBulk {
 	return &ItemCreateBulk{config: c.config, builders: builders}
 }
 
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ItemClient) MapCreateBulk(slice any, setFunc func(*ItemCreate, int)) *ItemCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ItemCreateBulk{err: fmt.Errorf("calling to ItemClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ItemCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ItemCreateBulk{config: c.config, builders: builders}
+}
+
 // Update returns an update builder for Item.
 func (c *ItemClient) Update() *ItemUpdate {
 	mutation := newItemMutation(c.config, OpUpdate)
@@ -1762,6 +2078,21 @@ func (c *LicenseClient) Create() *LicenseCreate {
 
 // CreateBulk returns a builder for creating a bulk of License entities.
 func (c *LicenseClient) CreateBulk(builders ...*LicenseCreate) *LicenseCreateBulk {
+	return &LicenseCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *LicenseClient) MapCreateBulk(slice any, setFunc func(*LicenseCreate, int)) *LicenseCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &LicenseCreateBulk{err: fmt.Errorf("calling to LicenseClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*LicenseCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
 	return &LicenseCreateBulk{config: c.config, builders: builders}
 }
 
@@ -1883,6 +2214,21 @@ func (c *NodeClient) CreateBulk(builders ...*NodeCreate) *NodeCreateBulk {
 	return &NodeCreateBulk{config: c.config, builders: builders}
 }
 
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *NodeClient) MapCreateBulk(slice any, setFunc func(*NodeCreate, int)) *NodeCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &NodeCreateBulk{err: fmt.Errorf("calling to NodeClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*NodeCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &NodeCreateBulk{config: c.config, builders: builders}
+}
+
 // Update returns an update builder for Node.
 func (c *NodeClient) Update() *NodeUpdate {
 	mutation := newNodeMutation(c.config, OpUpdate)
@@ -1990,6 +2336,139 @@ func (c *NodeClient) mutate(ctx context.Context, m *NodeMutation) (Value, error)
 	}
 }
 
+// PCClient is a client for the PC schema.
+type PCClient struct {
+	config
+}
+
+// NewPCClient returns a client for the PC from the given config.
+func NewPCClient(c config) *PCClient {
+	return &PCClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `pc.Hooks(f(g(h())))`.
+func (c *PCClient) Use(hooks ...Hook) {
+	c.hooks.PC = append(c.hooks.PC, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `pc.Intercept(f(g(h())))`.
+func (c *PCClient) Intercept(interceptors ...Interceptor) {
+	c.inters.PC = append(c.inters.PC, interceptors...)
+}
+
+// Create returns a builder for creating a PC entity.
+func (c *PCClient) Create() *PCCreate {
+	mutation := newPCMutation(c.config, OpCreate)
+	return &PCCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of PC entities.
+func (c *PCClient) CreateBulk(builders ...*PCCreate) *PCCreateBulk {
+	return &PCCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PCClient) MapCreateBulk(slice any, setFunc func(*PCCreate, int)) *PCCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PCCreateBulk{err: fmt.Errorf("calling to PCClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PCCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PCCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for PC.
+func (c *PCClient) Update() *PCUpdate {
+	mutation := newPCMutation(c.config, OpUpdate)
+	return &PCUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PCClient) UpdateOne(_pc *PC) *PCUpdateOne {
+	mutation := newPCMutation(c.config, OpUpdateOne, withPC(_pc))
+	return &PCUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PCClient) UpdateOneID(id string) *PCUpdateOne {
+	mutation := newPCMutation(c.config, OpUpdateOne, withPCID(id))
+	return &PCUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for PC.
+func (c *PCClient) Delete() *PCDelete {
+	mutation := newPCMutation(c.config, OpDelete)
+	return &PCDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PCClient) DeleteOne(_pc *PC) *PCDeleteOne {
+	return c.DeleteOneID(_pc.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PCClient) DeleteOneID(id string) *PCDeleteOne {
+	builder := c.Delete().Where(pc.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PCDeleteOne{builder}
+}
+
+// Query returns a query builder for PC.
+func (c *PCClient) Query() *PCQuery {
+	return &PCQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePC},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a PC entity by its id.
+func (c *PCClient) Get(ctx context.Context, id string) (*PC, error) {
+	return c.Query().Where(pc.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PCClient) GetX(ctx context.Context, id string) *PC {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *PCClient) Hooks() []Hook {
+	return c.hooks.PC
+}
+
+// Interceptors returns the client interceptors.
+func (c *PCClient) Interceptors() []Interceptor {
+	return c.inters.PC
+}
+
+func (c *PCClient) mutate(ctx context.Context, m *PCMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PCCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PCUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PCUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PCDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown PC mutation op: %q", m.Op())
+	}
+}
+
 // PetClient is a client for the Pet schema.
 type PetClient struct {
 	config
@@ -2020,6 +2499,21 @@ func (c *PetClient) Create() *PetCreate {
 
 // CreateBulk returns a builder for creating a bulk of Pet entities.
 func (c *PetClient) CreateBulk(builders ...*PetCreate) *PetCreateBulk {
+	return &PetCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PetClient) MapCreateBulk(slice any, setFunc func(*PetCreate, int)) *PetCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PetCreateBulk{err: fmt.Errorf("calling to PetClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PetCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
 	return &PetCreateBulk{config: c.config, builders: builders}
 }
 
@@ -2163,6 +2657,21 @@ func (c *SpecClient) CreateBulk(builders ...*SpecCreate) *SpecCreateBulk {
 	return &SpecCreateBulk{config: c.config, builders: builders}
 }
 
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SpecClient) MapCreateBulk(slice any, setFunc func(*SpecCreate, int)) *SpecCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SpecCreateBulk{err: fmt.Errorf("calling to SpecClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SpecCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SpecCreateBulk{config: c.config, builders: builders}
+}
+
 // Update returns an update builder for Spec.
 func (c *SpecClient) Update() *SpecUpdate {
 	mutation := newSpecMutation(c.config, OpUpdate)
@@ -2292,6 +2801,21 @@ func (c *TaskClient) CreateBulk(builders ...*TaskCreate) *TaskCreateBulk {
 	return &TaskCreateBulk{config: c.config, builders: builders}
 }
 
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *TaskClient) MapCreateBulk(slice any, setFunc func(*TaskCreate, int)) *TaskCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &TaskCreateBulk{err: fmt.Errorf("calling to TaskClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*TaskCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &TaskCreateBulk{config: c.config, builders: builders}
+}
+
 // Update returns an update builder for Task.
 func (c *TaskClient) Update() *TaskUpdate {
 	mutation := newTaskMutation(c.config, OpUpdate)
@@ -2407,6 +2931,21 @@ func (c *UserClient) Create() *UserCreate {
 
 // CreateBulk returns a builder for creating a bulk of User entities.
 func (c *UserClient) CreateBulk(builders ...*UserCreate) *UserCreateBulk {
+	return &UserCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UserClient) MapCreateBulk(slice any, setFunc func(*UserCreate, int)) *UserCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UserCreateBulk{err: fmt.Errorf("calling to UserClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UserCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
 	return &UserCreateBulk{config: c.config, builders: builders}
 }
 
@@ -2619,11 +3158,12 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Api, Card, Comment, ExValueScan, FieldType, File, FileType, Goods, Group,
-		GroupInfo, Item, License, Node, Pet, Spec, Task, User []ent.Hook
+		Api, Builder, Card, Comment, ExValueScan, FieldType, File, FileType, Goods,
+		Group, GroupInfo, Item, License, Node, PC, Pet, Spec, Task, User []ent.Hook
 	}
 	inters struct {
-		Api, Card, Comment, ExValueScan, FieldType, File, FileType, Goods, Group,
-		GroupInfo, Item, License, Node, Pet, Spec, Task, User []ent.Interceptor
+		Api, Builder, Card, Comment, ExValueScan, FieldType, File, FileType, Goods,
+		Group, GroupInfo, Item, License, Node, PC, Pet, Spec, Task,
+		User []ent.Interceptor
 	}
 )

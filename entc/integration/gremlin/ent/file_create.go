@@ -226,13 +226,13 @@ func (fc *FileCreate) gremlinSave(ctx context.Context) (*File, error) {
 	if err, ok := isConstantError(res); ok {
 		return nil, err
 	}
-	f := &File{config: fc.config}
-	if err := f.FromResponse(res); err != nil {
+	rnode := &File{config: fc.config}
+	if err := rnode.FromResponse(res); err != nil {
 		return nil, err
 	}
-	fc.mutation.id = &f.ID
+	fc.mutation.id = &rnode.ID
 	fc.mutation.done = true
-	return f, nil
+	return rnode, nil
 }
 
 func (fc *FileCreate) gremlin() *dsl.Traversal {
@@ -286,5 +286,6 @@ func (fc *FileCreate) gremlin() *dsl.Traversal {
 // FileCreateBulk is the builder for creating many File entities in bulk.
 type FileCreateBulk struct {
 	config
+	err      error
 	builders []*FileCreate
 }

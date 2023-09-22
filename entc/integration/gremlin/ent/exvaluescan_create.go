@@ -136,13 +136,13 @@ func (evsc *ExValueScanCreate) gremlinSave(ctx context.Context) (*ExValueScan, e
 	if err, ok := isConstantError(res); ok {
 		return nil, err
 	}
-	evs := &ExValueScan{config: evsc.config}
-	if err := evs.FromResponse(res); err != nil {
+	rnode := &ExValueScan{config: evsc.config}
+	if err := rnode.FromResponse(res); err != nil {
 		return nil, err
 	}
-	evsc.mutation.id = &evs.ID
+	evsc.mutation.id = &rnode.ID
 	evsc.mutation.done = true
-	return evs, nil
+	return rnode, nil
 }
 
 func (evsc *ExValueScanCreate) gremlin() *dsl.Traversal {
@@ -174,5 +174,6 @@ func (evsc *ExValueScanCreate) gremlin() *dsl.Traversal {
 // ExValueScanCreateBulk is the builder for creating many ExValueScan entities in bulk.
 type ExValueScanCreateBulk struct {
 	config
+	err      error
 	builders []*ExValueScanCreate
 }

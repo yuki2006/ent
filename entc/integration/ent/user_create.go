@@ -167,6 +167,20 @@ func (uc *UserCreate) SetNillableSSOCert(s *string) *UserCreate {
 	return uc
 }
 
+// SetFilesCount sets the "files_count" field.
+func (uc *UserCreate) SetFilesCount(i int) *UserCreate {
+	uc.mutation.SetFilesCount(i)
+	return uc
+}
+
+// SetNillableFilesCount sets the "files_count" field if the given value is not nil.
+func (uc *UserCreate) SetNillableFilesCount(i *int) *UserCreate {
+	if i != nil {
+		uc.SetFilesCount(*i)
+	}
+	return uc
+}
+
 // SetCardID sets the "card" edge to the Card entity by ID.
 func (uc *UserCreate) SetCardID(id int) *UserCreate {
 	uc.mutation.SetCardID(id)
@@ -503,6 +517,10 @@ func (uc *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := uc.mutation.SSOCert(); ok {
 		_spec.SetField(user.FieldSSOCert, field.TypeString, value)
 		_node.SSOCert = value
+	}
+	if value, ok := uc.mutation.FilesCount(); ok {
+		_spec.SetField(user.FieldFilesCount, field.TypeInt, value)
+		_node.FilesCount = value
 	}
 	if nodes := uc.mutation.CardIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -914,6 +932,30 @@ func (u *UserUpsert) ClearSSOCert() *UserUpsert {
 	return u
 }
 
+// SetFilesCount sets the "files_count" field.
+func (u *UserUpsert) SetFilesCount(v int) *UserUpsert {
+	u.Set(user.FieldFilesCount, v)
+	return u
+}
+
+// UpdateFilesCount sets the "files_count" field to the value that was provided on create.
+func (u *UserUpsert) UpdateFilesCount() *UserUpsert {
+	u.SetExcluded(user.FieldFilesCount)
+	return u
+}
+
+// AddFilesCount adds v to the "files_count" field.
+func (u *UserUpsert) AddFilesCount(v int) *UserUpsert {
+	u.Add(user.FieldFilesCount, v)
+	return u
+}
+
+// ClearFilesCount clears the value of the "files_count" field.
+func (u *UserUpsert) ClearFilesCount() *UserUpsert {
+	u.SetNull(user.FieldFilesCount)
+	return u
+}
+
 // UpdateNewValues updates the mutable fields using the new values that were set on create.
 // Using this option is equivalent to using:
 //
@@ -1164,6 +1206,34 @@ func (u *UserUpsertOne) ClearSSOCert() *UserUpsertOne {
 	})
 }
 
+// SetFilesCount sets the "files_count" field.
+func (u *UserUpsertOne) SetFilesCount(v int) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetFilesCount(v)
+	})
+}
+
+// AddFilesCount adds v to the "files_count" field.
+func (u *UserUpsertOne) AddFilesCount(v int) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.AddFilesCount(v)
+	})
+}
+
+// UpdateFilesCount sets the "files_count" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateFilesCount() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateFilesCount()
+	})
+}
+
+// ClearFilesCount clears the value of the "files_count" field.
+func (u *UserUpsertOne) ClearFilesCount() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearFilesCount()
+	})
+}
+
 // Exec executes the query.
 func (u *UserUpsertOne) Exec(ctx context.Context) error {
 	if len(u.create.conflict) == 0 {
@@ -1200,12 +1270,16 @@ func (u *UserUpsertOne) IDX(ctx context.Context) int {
 // UserCreateBulk is the builder for creating many User entities in bulk.
 type UserCreateBulk struct {
 	config
+	err      error
 	builders []*UserCreate
 	conflict []sql.ConflictOption
 }
 
 // Save creates the User entities in the database.
 func (ucb *UserCreateBulk) Save(ctx context.Context) ([]*User, error) {
+	if ucb.err != nil {
+		return nil, ucb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(ucb.builders))
 	nodes := make([]*User, len(ucb.builders))
 	mutators := make([]Mutator, len(ucb.builders))
@@ -1574,8 +1648,39 @@ func (u *UserUpsertBulk) ClearSSOCert() *UserUpsertBulk {
 	})
 }
 
+// SetFilesCount sets the "files_count" field.
+func (u *UserUpsertBulk) SetFilesCount(v int) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetFilesCount(v)
+	})
+}
+
+// AddFilesCount adds v to the "files_count" field.
+func (u *UserUpsertBulk) AddFilesCount(v int) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.AddFilesCount(v)
+	})
+}
+
+// UpdateFilesCount sets the "files_count" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateFilesCount() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateFilesCount()
+	})
+}
+
+// ClearFilesCount clears the value of the "files_count" field.
+func (u *UserUpsertBulk) ClearFilesCount() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearFilesCount()
+	})
+}
+
 // Exec executes the query.
 func (u *UserUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
 	for i, b := range u.create.builders {
 		if len(b.conflict) != 0 {
 			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the UserCreateBulk instead", i)

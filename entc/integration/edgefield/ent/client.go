@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"reflect"
 
 	"entgo.io/ent"
 	"entgo.io/ent/entc/integration/edgefield/ent/migrate"
@@ -142,11 +143,14 @@ func Open(driverName, dataSourceName string, options ...Option) (*Client, error)
 	}
 }
 
+// ErrTxStarted is returned when trying to start a new transaction from a transactional client.
+var ErrTxStarted = errors.New("ent: cannot start a transaction within a transaction")
+
 // Tx returns a new transactional client. The provided context
 // is used until the transaction is committed or rolled back.
 func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	if _, ok := c.driver.(*txDriver); ok {
-		return nil, errors.New("ent: cannot start a transaction within a transaction")
+		return nil, ErrTxStarted
 	}
 	tx, err := newTx(ctx, c.driver)
 	if err != nil {
@@ -298,6 +302,21 @@ func (c *CarClient) CreateBulk(builders ...*CarCreate) *CarCreateBulk {
 	return &CarCreateBulk{config: c.config, builders: builders}
 }
 
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *CarClient) MapCreateBulk(slice any, setFunc func(*CarCreate, int)) *CarCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &CarCreateBulk{err: fmt.Errorf("calling to CarClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*CarCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &CarCreateBulk{config: c.config, builders: builders}
+}
+
 // Update returns an update builder for Car.
 func (c *CarClient) Update() *CarUpdate {
 	mutation := newCarMutation(c.config, OpUpdate)
@@ -429,6 +448,21 @@ func (c *CardClient) Create() *CardCreate {
 
 // CreateBulk returns a builder for creating a bulk of Card entities.
 func (c *CardClient) CreateBulk(builders ...*CardCreate) *CardCreateBulk {
+	return &CardCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *CardClient) MapCreateBulk(slice any, setFunc func(*CardCreate, int)) *CardCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &CardCreateBulk{err: fmt.Errorf("calling to CardClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*CardCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
 	return &CardCreateBulk{config: c.config, builders: builders}
 }
 
@@ -566,6 +600,21 @@ func (c *InfoClient) CreateBulk(builders ...*InfoCreate) *InfoCreateBulk {
 	return &InfoCreateBulk{config: c.config, builders: builders}
 }
 
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *InfoClient) MapCreateBulk(slice any, setFunc func(*InfoCreate, int)) *InfoCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &InfoCreateBulk{err: fmt.Errorf("calling to InfoClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*InfoCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &InfoCreateBulk{config: c.config, builders: builders}
+}
+
 // Update returns an update builder for Info.
 func (c *InfoClient) Update() *InfoUpdate {
 	mutation := newInfoMutation(c.config, OpUpdate)
@@ -697,6 +746,21 @@ func (c *MetadataClient) Create() *MetadataCreate {
 
 // CreateBulk returns a builder for creating a bulk of Metadata entities.
 func (c *MetadataClient) CreateBulk(builders ...*MetadataCreate) *MetadataCreateBulk {
+	return &MetadataCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *MetadataClient) MapCreateBulk(slice any, setFunc func(*MetadataCreate, int)) *MetadataCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &MetadataCreateBulk{err: fmt.Errorf("calling to MetadataClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*MetadataCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
 	return &MetadataCreateBulk{config: c.config, builders: builders}
 }
 
@@ -866,6 +930,21 @@ func (c *NodeClient) CreateBulk(builders ...*NodeCreate) *NodeCreateBulk {
 	return &NodeCreateBulk{config: c.config, builders: builders}
 }
 
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *NodeClient) MapCreateBulk(slice any, setFunc func(*NodeCreate, int)) *NodeCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &NodeCreateBulk{err: fmt.Errorf("calling to NodeClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*NodeCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &NodeCreateBulk{config: c.config, builders: builders}
+}
+
 // Update returns an update builder for Node.
 func (c *NodeClient) Update() *NodeUpdate {
 	mutation := newNodeMutation(c.config, OpUpdate)
@@ -1016,6 +1095,21 @@ func (c *PetClient) CreateBulk(builders ...*PetCreate) *PetCreateBulk {
 	return &PetCreateBulk{config: c.config, builders: builders}
 }
 
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PetClient) MapCreateBulk(slice any, setFunc func(*PetCreate, int)) *PetCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PetCreateBulk{err: fmt.Errorf("calling to PetClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PetCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PetCreateBulk{config: c.config, builders: builders}
+}
+
 // Update returns an update builder for Pet.
 func (c *PetClient) Update() *PetUpdate {
 	mutation := newPetMutation(c.config, OpUpdate)
@@ -1150,6 +1244,21 @@ func (c *PostClient) CreateBulk(builders ...*PostCreate) *PostCreateBulk {
 	return &PostCreateBulk{config: c.config, builders: builders}
 }
 
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PostClient) MapCreateBulk(slice any, setFunc func(*PostCreate, int)) *PostCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PostCreateBulk{err: fmt.Errorf("calling to PostClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PostCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PostCreateBulk{config: c.config, builders: builders}
+}
+
 // Update returns an update builder for Post.
 func (c *PostClient) Update() *PostUpdate {
 	mutation := newPostMutation(c.config, OpUpdate)
@@ -1281,6 +1390,21 @@ func (c *RentalClient) Create() *RentalCreate {
 
 // CreateBulk returns a builder for creating a bulk of Rental entities.
 func (c *RentalClient) CreateBulk(builders ...*RentalCreate) *RentalCreateBulk {
+	return &RentalCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RentalClient) MapCreateBulk(slice any, setFunc func(*RentalCreate, int)) *RentalCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RentalCreateBulk{err: fmt.Errorf("calling to RentalClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RentalCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
 	return &RentalCreateBulk{config: c.config, builders: builders}
 }
 
@@ -1431,6 +1555,21 @@ func (c *UserClient) Create() *UserCreate {
 
 // CreateBulk returns a builder for creating a bulk of User entities.
 func (c *UserClient) CreateBulk(builders ...*UserCreate) *UserCreateBulk {
+	return &UserCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UserClient) MapCreateBulk(slice any, setFunc func(*UserCreate, int)) *UserCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UserCreateBulk{err: fmt.Errorf("calling to UserClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UserCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
 	return &UserCreateBulk{config: c.config, builders: builders}
 }
 

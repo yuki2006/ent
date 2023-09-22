@@ -126,6 +126,36 @@ func StringsNotNil() predicate.User {
 	return predicate.User(sql.FieldNotNull(FieldStrings))
 }
 
+// IntsValidateIsNil applies the IsNil predicate on the "ints_validate" field.
+func IntsValidateIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldIntsValidate))
+}
+
+// IntsValidateNotNil applies the NotNil predicate on the "ints_validate" field.
+func IntsValidateNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldIntsValidate))
+}
+
+// FloatsValidateIsNil applies the IsNil predicate on the "floats_validate" field.
+func FloatsValidateIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldFloatsValidate))
+}
+
+// FloatsValidateNotNil applies the NotNil predicate on the "floats_validate" field.
+func FloatsValidateNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldFloatsValidate))
+}
+
+// StringsValidateIsNil applies the IsNil predicate on the "strings_validate" field.
+func StringsValidateIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldStringsValidate))
+}
+
+// StringsValidateNotNil applies the NotNil predicate on the "strings_validate" field.
+func StringsValidateNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldStringsValidate))
+}
+
 // AddrIsNil applies the IsNil predicate on the "addr" field.
 func AddrIsNil() predicate.User {
 	return predicate.User(sql.FieldIsNull(FieldAddr))
@@ -148,32 +178,15 @@ func UnknownNotNil() predicate.User {
 
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.User) predicate.User {
-	return predicate.User(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for _, p := range predicates {
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.User(sql.AndPredicates(predicates...))
 }
 
 // Or groups predicates with the OR operator between them.
 func Or(predicates ...predicate.User) predicate.User {
-	return predicate.User(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for i, p := range predicates {
-			if i > 0 {
-				s1.Or()
-			}
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.User(sql.OrPredicates(predicates...))
 }
 
 // Not applies the not operator on the given predicate.
 func Not(p predicate.User) predicate.User {
-	return predicate.User(func(s *sql.Selector) {
-		p(s.Not())
-	})
+	return predicate.User(sql.NotPredicates(p))
 }

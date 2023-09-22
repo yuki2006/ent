@@ -125,13 +125,13 @@ func (gic *GroupInfoCreate) gremlinSave(ctx context.Context) (*GroupInfo, error)
 	if err, ok := isConstantError(res); ok {
 		return nil, err
 	}
-	gi := &GroupInfo{config: gic.config}
-	if err := gi.FromResponse(res); err != nil {
+	rnode := &GroupInfo{config: gic.config}
+	if err := rnode.FromResponse(res); err != nil {
 		return nil, err
 	}
-	gic.mutation.id = &gi.ID
+	gic.mutation.id = &rnode.ID
 	gic.mutation.done = true
-	return gi, nil
+	return rnode, nil
 }
 
 func (gic *GroupInfoCreate) gremlin() *dsl.Traversal {
@@ -167,5 +167,6 @@ func (gic *GroupInfoCreate) gremlin() *dsl.Traversal {
 // GroupInfoCreateBulk is the builder for creating many GroupInfo entities in bulk.
 type GroupInfoCreateBulk struct {
 	config
+	err      error
 	builders []*GroupInfoCreate
 }
