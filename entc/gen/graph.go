@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"text/template/parse"
 
@@ -249,7 +250,7 @@ func generate(g *Graph) error {
 		}
 		assets.add(filepath.Join(g.Config.Target, tmpl.Format), b.Bytes())
 	}
-	for _, f := range AllFeatures {
+	for _, f := range allFeatures {
 		if f.cleanup == nil || g.featureEnabled(f) {
 			continue
 		}
@@ -885,7 +886,7 @@ func (g *Graph) SchemaSnapshot() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return string(out), nil
+	return strconv.Quote(string(out)), nil
 }
 
 func (g *Graph) typ(name string) (*Type, bool) {
@@ -979,7 +980,7 @@ func (Config) ModuleInfo() (m debug.Module) {
 //		...
 //	{{ end }}
 func (c Config) FeatureEnabled(name string) (bool, error) {
-	for _, f := range AllFeatures {
+	for _, f := range allFeatures {
 		if name == f.Name {
 			return c.featureEnabled(f), nil
 		}
