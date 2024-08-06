@@ -34,6 +34,20 @@ func (cu *CardUpdate) Where(ps ...predicate.Card) *CardUpdate {
 	return cu
 }
 
+// SetType sets the "type" field.
+func (cu *CardUpdate) SetType(s string) *CardUpdate {
+	cu.mutation.SetType(s)
+	return cu
+}
+
+// SetNillableType sets the "type" field if the given value is not nil.
+func (cu *CardUpdate) SetNillableType(s *string) *CardUpdate {
+	if s != nil {
+		cu.SetType(*s)
+	}
+	return cu
+}
+
 // SetNumberHash sets the "number_hash" field.
 func (cu *CardUpdate) SetNumberHash(s string) *CardUpdate {
 	cu.mutation.SetNumberHash(s)
@@ -177,7 +191,7 @@ func (cu *CardUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (cu *CardUpdate) check() error {
-	if _, ok := cu.mutation.OwnerID(); cu.mutation.OwnerCleared() && !ok {
+	if cu.mutation.OwnerCleared() && len(cu.mutation.OwnerIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Card.owner"`)
 	}
 	return nil
@@ -194,6 +208,9 @@ func (cu *CardUpdate) sqlSave(ctx context.Context) (n int, err error) {
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := cu.mutation.GetType(); ok {
+		_spec.SetField(card.FieldType, field.TypeString, value)
 	}
 	if value, ok := cu.mutation.NumberHash(); ok {
 		_spec.SetField(card.FieldNumberHash, field.TypeString, value)
@@ -299,6 +316,20 @@ type CardUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *CardMutation
+}
+
+// SetType sets the "type" field.
+func (cuo *CardUpdateOne) SetType(s string) *CardUpdateOne {
+	cuo.mutation.SetType(s)
+	return cuo
+}
+
+// SetNillableType sets the "type" field if the given value is not nil.
+func (cuo *CardUpdateOne) SetNillableType(s *string) *CardUpdateOne {
+	if s != nil {
+		cuo.SetType(*s)
+	}
+	return cuo
 }
 
 // SetNumberHash sets the "number_hash" field.
@@ -457,7 +488,7 @@ func (cuo *CardUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (cuo *CardUpdateOne) check() error {
-	if _, ok := cuo.mutation.OwnerID(); cuo.mutation.OwnerCleared() && !ok {
+	if cuo.mutation.OwnerCleared() && len(cuo.mutation.OwnerIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Card.owner"`)
 	}
 	return nil
@@ -491,6 +522,9 @@ func (cuo *CardUpdateOne) sqlSave(ctx context.Context) (_node *Card, err error) 
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := cuo.mutation.GetType(); ok {
+		_spec.SetField(card.FieldType, field.TypeString, value)
 	}
 	if value, ok := cuo.mutation.NumberHash(); ok {
 		_spec.SetField(card.FieldNumberHash, field.TypeString, value)
