@@ -301,6 +301,18 @@ func ({{ $receiver }} *{{ $builder }}) Clone() *{{ $builder }} {
 	}
 }
 
+// custom by ono
+
+func ({{ $receiver }} *{{ $builder }}) CloneTransaction() *{{ $builder }} {
+	if {{ $receiver }} == nil {
+		return nil
+	}
+	return &{{ $builder }}{
+		config: 	{{ $receiver }}.config,
+		ctx: 		{{ $receiver }}.ctx.Clone(),
+	}
+}
+
 {{- range $e := $.Edges }}
 	{{ $ebuilder := $e.Type.QueryName }}
 	{{ $func := print "With" $e.StructField }}
