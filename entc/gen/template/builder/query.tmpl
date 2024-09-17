@@ -309,7 +309,7 @@ func ({{ $receiver }} *{{ $builder }}) CloneTransaction() *{{ $builder }} {
 	}
 	return &{{ $builder }}{
 		config: 	{{ $receiver }}.config,
-		ctx:   &QueryContext{Type: iq.ctx.Type},
+		ctx:   &QueryContext{Type: {{ $receiver }}.ctx.Type},
 	}
 }
 
