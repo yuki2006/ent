@@ -17,7 +17,9 @@ import (
 	"net"
 	"net/url"
 	"reflect"
+	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -104,7 +106,16 @@ func TestMaria(t *testing.T) {
 }
 
 func TestPostgres(t *testing.T) {
-	for version, port := range map[string]int{"10": 5430, "11": 5431, "12": 5432, "13": 5433, "14": 5434, "15": 5435} {
+	for version, port := range map[string]int{
+		"10": 5430,
+		"11": 5431,
+		"12": 5432,
+		"13": 5433,
+		"14": 5434,
+		"15": 5435,
+		"16": 5436,
+		"17": 5437,
+	} {
 		addr := fmt.Sprintf("host=localhost port=%d user=postgres dbname=test password=pass sslmode=disable", port)
 		t.Run(version, func(t *testing.T) {
 			t.Parallel()
@@ -781,16 +792,38 @@ func Select(t *testing.T, client *ent.Client) {
 	require.True(allUpper(), "at names must be upper-cased")
 
 	// Select and scan dynamic values.
-	const as = "name_length"
+	const (
+		as1 = "name_length"
+		as2 = "another_name"
+	)
 	pets = client.Pet.Query().
 		Modify(func(s *sql.Selector) {
-			s.AppendSelectAs("LENGTH(name)", as)
+			s.AppendSelectAs("LENGTH(name)", as1)
+			s.AppendSelectAs("optional_time", as2)
 		}).
 		AllX(ctx)
 	for _, p := range pets {
-		n, err := p.Value(as)
+		n, err := p.Value(as1)
 		require.NoError(err)
 		require.EqualValues(len(p.Name), n)
+		v, err := p.Value(as2)
+		require.NoError(err)
+		require.Nil(v)
+	}
+
+	// Update and scan.
+	require.NoError(client.Pet.Update().SetOptionalTime(time.Now()).Exec(ctx))
+	pets = client.Pet.Query().
+		Modify(func(s *sql.Selector) {
+			s.AppendSelectAs("optional_time", as2)
+		}).
+		AllX(ctx)
+	for _, p := range pets {
+		v, err := p.Value(as2)
+		require.NoError(err)
+		tv, ok := v.(time.Time)
+		require.True(ok)
+		require.True(!tv.IsZero())
 	}
 
 	// Order by random value should compile a valid query.
@@ -1599,6 +1632,15 @@ func UniqueConstraint(t *testing.T, client *ent.Client) {
 	require.Error(err)
 	err = cm1.Update().SetUniqueFloat(math.E).Exec(ctx)
 	require.Error(err)
+
+	t.Log("unique constraint on time fields")
+	now := time.Now()
+	client.File.Create().SetName("a").SetSize(10).SetCreateTime(now).ExecX(ctx)
+	err = client.File.Create().SetName("b").SetSize(20).SetCreateTime(now).Exec(ctx)
+	require.Error(err)
+	require.True(ent.IsConstraintError(err))
+	now = now.Add(time.Second)
+	client.File.Create().SetName("b").SetSize(20).SetCreateTime(now).ExecX(ctx)
 }
 
 type mocker struct{ mock.Mock }
@@ -2099,18 +2141,23 @@ func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
 func NoSchemaChanges(t *testing.T, client *ent.Client) {
 	w := writerFunc(func(p []byte) (int, error) {
 		stmt := strings.Trim(string(p), "\n;")
-		ok := []string{"BEGIN", "COMMIT"}
-		if strings.Contains(t.Name(), "SQLite") {
-			ok = append(ok, "PRAGMA foreign_keys = off", "PRAGMA foreign_keys = on")
+		ok := []*regexp.Regexp{
+			regexp.MustCompile("^BEGIN$"),
+			regexp.MustCompile("^COMMIT$"),
 		}
-		if !func() bool {
-			for _, s := range ok {
-				if s == stmt {
-					return true
-				}
-			}
-			return false
-		}() {
+		switch {
+		case strings.Contains(t.Name(), "SQLite"):
+			ok = append(ok, regexp.MustCompile("^PRAGMA foreign_keys = (off|on)$"))
+		case strings.Contains(t.Name(), "MySQL"), strings.Contains(t.Name(), "Maria"):
+			ok = append(ok, regexp.MustCompile("^ALTER TABLE `\\w+` AUTO_INCREMENT \\d+$"))
+		}
+		if !slices.ContainsFunc(ok, func(re *regexp.Regexp) bool {
+			return re.MatchString(stmt)
+		}) {
+			// MySQL 5.6 + 5.7, and MariaDB 10.x store auto-increment counter in memory. In cases the server is
+			// restarted, and there are no rows, the counter is reset. Atlas "fixes" this by setting the auto-increment
+			// value in those cases. Therefore, statements following the pattern
+			// "ALTER TABLE `<table>` AUTO_INCREMENT = <value>" are allowed.
 			t.Errorf("expect no statement to execute. got: %q", stmt)
 		}
 		return len(p), nil

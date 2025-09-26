@@ -2450,7 +2450,6 @@ func TestQueryNodesSchema(t *testing.T) {
 			AddRow(1, 10, nil, nil, nil).
 			AddRow(2, 20, "", 0, 0).
 			AddRow(3, 30, "a8m", 1, 1))
-
 	var (
 		users []*user
 		spec  = &QuerySpec{
@@ -2570,6 +2569,7 @@ func TestIsConstraintError(t *testing.T) {
 		expectedConstraint bool
 		expectedFK         bool
 		expectedUnique     bool
+		expectedCheck      bool
 	}{
 		{
 			name: "MySQL FK",
@@ -2579,6 +2579,7 @@ func TestIsConstraintError(t *testing.T) {
 			expectedConstraint: true,
 			expectedFK:         true,
 			expectedUnique:     false,
+			expectedCheck:      false,
 		},
 		{
 			name:               "SQLite FK",
@@ -2586,6 +2587,7 @@ func TestIsConstraintError(t *testing.T) {
 			expectedConstraint: true,
 			expectedFK:         true,
 			expectedUnique:     false,
+			expectedCheck:      false,
 		},
 		{
 			name:               "Postgres FK",
@@ -2593,6 +2595,7 @@ func TestIsConstraintError(t *testing.T) {
 			expectedConstraint: true,
 			expectedFK:         true,
 			expectedUnique:     false,
+			expectedCheck:      false,
 		},
 		{
 			name: "MySQL FK",
@@ -2601,6 +2604,7 @@ func TestIsConstraintError(t *testing.T) {
 			expectedConstraint: true,
 			expectedFK:         true,
 			expectedUnique:     false,
+			expectedCheck:      false,
 		},
 		{
 			name:               "SQLite FK",
@@ -2608,6 +2612,7 @@ func TestIsConstraintError(t *testing.T) {
 			expectedConstraint: true,
 			expectedFK:         true,
 			expectedUnique:     false,
+			expectedCheck:      false,
 		},
 		{
 			name:               "Postgres FK",
@@ -2615,6 +2620,7 @@ func TestIsConstraintError(t *testing.T) {
 			expectedConstraint: true,
 			expectedFK:         true,
 			expectedUnique:     false,
+			expectedCheck:      false,
 		},
 		{
 			name:               "MySQL Unique",
@@ -2622,6 +2628,7 @@ func TestIsConstraintError(t *testing.T) {
 			expectedConstraint: true,
 			expectedFK:         false,
 			expectedUnique:     true,
+			expectedCheck:      false,
 		},
 		{
 			name:               "SQLite Unique",
@@ -2629,6 +2636,7 @@ func TestIsConstraintError(t *testing.T) {
 			expectedConstraint: true,
 			expectedFK:         false,
 			expectedUnique:     true,
+			expectedCheck:      false,
 		},
 		{
 			name:               "Postgres Unique",
@@ -2636,6 +2644,31 @@ func TestIsConstraintError(t *testing.T) {
 			expectedConstraint: true,
 			expectedFK:         false,
 			expectedUnique:     true,
+			expectedCheck:      false,
+		},
+		{
+			name:               "MySQL Check",
+			errMessage:         `insert node to table "users": Error 3819: Check constraint 'users_age_check' is violated`,
+			expectedConstraint: true,
+			expectedFK:         false,
+			expectedUnique:     false,
+			expectedCheck:      true,
+		},
+		{
+			name:               "SQLite Check",
+			errMessage:         `insert node to table "users": CHECK constraint failed: age >= 18`,
+			expectedConstraint: true,
+			expectedFK:         false,
+			expectedUnique:     false,
+			expectedCheck:      true,
+		},
+		{
+			name:               "Postgres Check",
+			errMessage:         `insert node to table "users": pq: new row for relation "users" violates check constraint "users_age_check"`,
+			expectedConstraint: true,
+			expectedFK:         false,
+			expectedUnique:     false,
+			expectedCheck:      true,
 		},
 	}
 	for _, tt := range tests {
@@ -2644,6 +2677,7 @@ func TestIsConstraintError(t *testing.T) {
 			require.EqualValues(t, tt.expectedConstraint, IsConstraintError(err))
 			require.EqualValues(t, tt.expectedFK, IsForeignKeyConstraintError(err))
 			require.EqualValues(t, tt.expectedUnique, IsUniqueConstraintError(err))
+			require.EqualValues(t, tt.expectedCheck, IsCheckConstraintError(err))
 		})
 	}
 }

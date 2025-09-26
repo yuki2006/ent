@@ -6,13 +6,15 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 )
 
 // User holds the schema definition for the User entity.
 type User struct {
-	ent.Schema
+	base
 }
 
 // Fields of the User.
@@ -31,5 +33,28 @@ func (User) Edges() []ent.Edge {
 			Ref("users"),
 		edge.To("friends", User.Type).
 			Through("friendships", Friendship.Type),
+		edge.To("children", User.Type).
+			Through("parent_hood", Parent.Type).
+			From("parents"),
+	}
+}
+
+// CleanUser represents a user without its PII field.
+type CleanUser struct {
+	ent.View
+}
+
+// Annotations of the CleanUser.
+func (CleanUser) Annotations() []schema.Annotation {
+	return []schema.Annotation{
+		entsql.View("SELECT id, name FROM users"),
+		entsql.Schema("db1"),
+	}
+}
+
+// Fields of the CleanUser.
+func (CleanUser) Fields() []ent.Field {
+	return []ent.Field{
+		field.String("name"),
 	}
 }

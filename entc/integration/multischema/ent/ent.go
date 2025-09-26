@@ -16,8 +16,10 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/entc/integration/multischema/ent/cleanuser"
 	"entgo.io/ent/entc/integration/multischema/ent/friendship"
 	"entgo.io/ent/entc/integration/multischema/ent/group"
+	"entgo.io/ent/entc/integration/multischema/ent/parent"
 	"entgo.io/ent/entc/integration/multischema/ent/pet"
 	"entgo.io/ent/entc/integration/multischema/ent/user"
 )
@@ -77,16 +79,18 @@ var (
 )
 
 // checkColumn checks if the column exists in the given table.
-func checkColumn(table, column string) error {
+func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
+			cleanuser.Table:  cleanuser.ValidColumn,
 			friendship.Table: friendship.ValidColumn,
 			group.Table:      group.ValidColumn,
+			parent.Table:     parent.ValidColumn,
 			pet.Table:        pet.ValidColumn,
 			user.Table:       user.ValidColumn,
 		})
 	})
-	return columnCheck(table, column)
+	return columnCheck(t, c)
 }
 
 // Asc applies the given fields in ASC order.

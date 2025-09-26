@@ -9,6 +9,7 @@ package ent
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"entgo.io/ent/dialect/gremlin"
 	"entgo.io/ent/entc/integration/gremlin/ent/user"
@@ -30,6 +31,8 @@ type Pet struct {
 	Nickname string `json:"nickname,omitempty"`
 	// Trained holds the value of the "trained" field.
 	Trained bool `json:"trained,omitempty"`
+	// OptionalTime holds the value of the "optional_time" field.
+	OptionalTime time.Time `json:"optional_time,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the PetQuery when eager-loading is set.
 	Edges PetEdges `json:"edges"`
@@ -69,78 +72,83 @@ func (e PetEdges) OwnerOrErr() (*User, error) {
 }
 
 // FromResponse scans the gremlin response data into Pet.
-func (pe *Pet) FromResponse(res *gremlin.Response) error {
+func (_m *Pet) FromResponse(res *gremlin.Response) error {
 	vmap, err := res.ReadValueMap()
 	if err != nil {
 		return err
 	}
-	var scanpe struct {
-		ID       string    `json:"id,omitempty"`
-		Age      float64   `json:"age,omitempty"`
-		Name     string    `json:"name,omitempty"`
-		UUID     uuid.UUID `json:"uuid,omitempty"`
-		Nickname string    `json:"nickname,omitempty"`
-		Trained  bool      `json:"trained,omitempty"`
+	var scan_m struct {
+		ID           string    `json:"id,omitempty"`
+		Age          float64   `json:"age,omitempty"`
+		Name         string    `json:"name,omitempty"`
+		UUID         uuid.UUID `json:"uuid,omitempty"`
+		Nickname     string    `json:"nickname,omitempty"`
+		Trained      bool      `json:"trained,omitempty"`
+		OptionalTime int64     `json:"optional_time,omitempty"`
 	}
-	if err := vmap.Decode(&scanpe); err != nil {
+	if err := vmap.Decode(&scan_m); err != nil {
 		return err
 	}
-	pe.ID = scanpe.ID
-	pe.Age = scanpe.Age
-	pe.Name = scanpe.Name
-	pe.UUID = scanpe.UUID
-	pe.Nickname = scanpe.Nickname
-	pe.Trained = scanpe.Trained
+	_m.ID = scan_m.ID
+	_m.Age = scan_m.Age
+	_m.Name = scan_m.Name
+	_m.UUID = scan_m.UUID
+	_m.Nickname = scan_m.Nickname
+	_m.Trained = scan_m.Trained
+	_m.OptionalTime = time.Unix(0, scan_m.OptionalTime)
 	return nil
 }
 
 // QueryTeam queries the "team" edge of the Pet entity.
-func (pe *Pet) QueryTeam() *UserQuery {
-	return NewPetClient(pe.config).QueryTeam(pe)
+func (_m *Pet) QueryTeam() *UserQuery {
+	return NewPetClient(_m.config).QueryTeam(_m)
 }
 
 // QueryOwner queries the "owner" edge of the Pet entity.
-func (pe *Pet) QueryOwner() *UserQuery {
-	return NewPetClient(pe.config).QueryOwner(pe)
+func (_m *Pet) QueryOwner() *UserQuery {
+	return NewPetClient(_m.config).QueryOwner(_m)
 }
 
 // Update returns a builder for updating this Pet.
 // Note that you need to call Pet.Unwrap() before calling this method if this Pet
 // was returned from a transaction, and the transaction was committed or rolled back.
-func (pe *Pet) Update() *PetUpdateOne {
-	return NewPetClient(pe.config).UpdateOne(pe)
+func (_m *Pet) Update() *PetUpdateOne {
+	return NewPetClient(_m.config).UpdateOne(_m)
 }
 
 // Unwrap unwraps the Pet entity that was returned from a transaction after it was closed,
 // so that all future queries will be executed through the driver which created the transaction.
-func (pe *Pet) Unwrap() *Pet {
-	_tx, ok := pe.config.driver.(*txDriver)
+func (_m *Pet) Unwrap() *Pet {
+	_tx, ok := _m.config.driver.(*txDriver)
 	if !ok {
 		panic("ent: Pet is not a transactional entity")
 	}
-	pe.config.driver = _tx.drv
-	return pe
+	_m.config.driver = _tx.drv
+	return _m
 }
 
 // String implements the fmt.Stringer.
-func (pe *Pet) String() string {
+func (_m *Pet) String() string {
 	var builder strings.Builder
 	builder.WriteString("Pet(")
-	builder.WriteString(fmt.Sprintf("id=%v, ", pe.ID))
+	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("age=")
-	builder.WriteString(fmt.Sprintf("%v", pe.Age))
+	builder.WriteString(fmt.Sprintf("%v", _m.Age))
 	builder.WriteString(", ")
 	builder.WriteString("name=")
-	builder.WriteString(pe.Name)
+	builder.WriteString(_m.Name)
 	builder.WriteString(", ")
 	builder.WriteString("uuid=")
-	builder.WriteString(fmt.Sprintf("%v", pe.UUID))
+	builder.WriteString(fmt.Sprintf("%v", _m.UUID))
 	builder.WriteString(", ")
 	builder.WriteString("nickname=")
-	builder.WriteString(pe.Nickname)
+	builder.WriteString(_m.Nickname)
 	builder.WriteString(", ")
 	builder.WriteString("trained=")
-	builder.WriteString(fmt.Sprintf("%v", pe.Trained))
+	builder.WriteString(fmt.Sprintf("%v", _m.Trained))
+	builder.WriteString(", ")
+	builder.WriteString("optional_time=")
+	builder.WriteString(_m.OptionalTime.Format(time.ANSIC))
 	builder.WriteByte(')')
 	return builder.String()
 }
@@ -149,30 +157,32 @@ func (pe *Pet) String() string {
 type Pets []*Pet
 
 // FromResponse scans the gremlin response data into Pets.
-func (pe *Pets) FromResponse(res *gremlin.Response) error {
+func (_m *Pets) FromResponse(res *gremlin.Response) error {
 	vmap, err := res.ReadValueMap()
 	if err != nil {
 		return err
 	}
-	var scanpe []struct {
-		ID       string    `json:"id,omitempty"`
-		Age      float64   `json:"age,omitempty"`
-		Name     string    `json:"name,omitempty"`
-		UUID     uuid.UUID `json:"uuid,omitempty"`
-		Nickname string    `json:"nickname,omitempty"`
-		Trained  bool      `json:"trained,omitempty"`
+	var scan_m []struct {
+		ID           string    `json:"id,omitempty"`
+		Age          float64   `json:"age,omitempty"`
+		Name         string    `json:"name,omitempty"`
+		UUID         uuid.UUID `json:"uuid,omitempty"`
+		Nickname     string    `json:"nickname,omitempty"`
+		Trained      bool      `json:"trained,omitempty"`
+		OptionalTime int64     `json:"optional_time,omitempty"`
 	}
-	if err := vmap.Decode(&scanpe); err != nil {
+	if err := vmap.Decode(&scan_m); err != nil {
 		return err
 	}
-	for _, v := range scanpe {
+	for _, v := range scan_m {
 		node := &Pet{ID: v.ID}
 		node.Age = v.Age
 		node.Name = v.Name
 		node.UUID = v.UUID
 		node.Nickname = v.Nickname
 		node.Trained = v.Trained
-		*pe = append(*pe, node)
+		node.OptionalTime = time.Unix(0, v.OptionalTime)
+		*_m = append(*_m, node)
 	}
 	return nil
 }

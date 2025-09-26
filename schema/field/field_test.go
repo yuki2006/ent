@@ -157,6 +157,30 @@ func TestFloat(t *testing.T) {
 	assert.Error(t, fd.Err)
 }
 
+func TestFloat_DefaultFunc(t *testing.T) {
+	type CustomFloat float64
+
+	f1 := func() CustomFloat { return 1.2 }
+	fd := field.Float("weight").DefaultFunc(f1).GoType(CustomFloat(0.)).Descriptor()
+	assert.NoError(t, fd.Err)
+
+	fd = field.Float("weight").DefaultFunc(f1).Descriptor()
+	assert.Error(t, fd.Err, "`var _ float = f1()` should fail")
+
+	f2 := func() float64 { return 1000 }
+	fd = field.Float("weight").GoType(CustomFloat(0)).DefaultFunc(f2).Descriptor()
+	assert.Error(t, fd.Err, "`var _ CustomFloat = f2()` should fail")
+
+	fd = field.Float("weight").DefaultFunc(f2).UpdateDefault(f2).Descriptor()
+	assert.NoError(t, fd.Err)
+	assert.NotNil(t, fd.Default)
+	assert.NotNil(t, fd.UpdateDefault)
+
+	f3 := func() float64 { return 1.2 }
+	fd = field.Float("weight").DefaultFunc(f3).Descriptor()
+	assert.NoError(t, fd.Err)
+}
+
 func TestBool(t *testing.T) {
 	fd := field.Bool("active").Default(true).Comment("comment").Immutable().Descriptor()
 	assert.Equal(t, "active", fd.Name)
@@ -950,4 +974,44 @@ func TestTypeConstName(t *testing.T) {
 	assert.Equal(t, "TypeOther", typ.ConstName())
 	typ = 21
 	assert.Equal(t, "invalid", typ.ConstName())
+}
+
+func TestString_MinRuneLen(t *testing.T) {
+	fd := field.String("name").MinRuneLen(5).Descriptor()
+	assert.Len(t, fd.Validators, 1)
+
+	err := fd.Validators[0].(func(string) error)("hello")
+	assert.NoError(t, err)
+
+	err = fd.Validators[0].(func(string) error)("hi")
+	assert.EqualError(t, err, "value is less than the required rune length")
+
+	err = fd.Validators[0].(func(string) error)("你好")
+	assert.EqualError(t, err, "value is less than the required rune length")
+
+	err = fd.Validators[0].(func(string) error)("你好世界！")
+	assert.NoError(t, err)
+
+	err = fd.Validators[0].(func(string) error)("")
+	assert.Error(t, err)
+}
+
+func TestString_MaxRuneLen(t *testing.T) {
+	fd := field.String("name").MaxRuneLen(5).Descriptor()
+	assert.Len(t, fd.Validators, 1)
+
+	err := fd.Validators[0].(func(string) error)("hello")
+	assert.NoError(t, err)
+
+	err = fd.Validators[0].(func(string) error)("hello world")
+	assert.EqualError(t, err, "value is greater than the required rune length")
+
+	err = fd.Validators[0].(func(string) error)("你好世界你好")
+	assert.EqualError(t, err, "value is greater than the required rune length")
+
+	err = fd.Validators[0].(func(string) error)("你好世界！")
+	assert.NoError(t, err)
+
+	err = fd.Validators[0].(func(string) error)("")
+	assert.NoError(t, err)
 }
